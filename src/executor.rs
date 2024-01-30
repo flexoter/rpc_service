@@ -5,6 +5,14 @@ use std::{collections::HashMap, error::Error};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+/// Executor implements internal logic of rpc requests
+///
+/// Supports two kind of requests:
+///     - storing data with key and data, both text types;
+///     - retreiving data with a specific key.
+///
+/// Internally utilyzes underlying db storage and hashmap as
+/// key-value storage for inserting/retreiving data.
 pub struct Executor {
     storage: Arc<Mutex<Storage>>,
     cache: Arc<Mutex<HashMap<String, String>>>,

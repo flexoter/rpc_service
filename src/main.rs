@@ -30,47 +30,6 @@ async fn main() -> Result<(), Box<io::Error>> {
     let listener = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
 
-    let client_socket = TcpSocket::new_v4().unwrap();
-
-    tokio::spawn(async move {
-        let client_stream = client_socket
-        .connect(addr.parse().unwrap())
-        .await
-        .expect("Client: failed to establish connection with the server");
-
-        let codec = LengthDelimitedCodec::new();
-        let mut framed_stream = Framed::new(client_stream, codec);
-
-        let mut save_req = SaveDataRequest::new();
-
-        save_req.key = String::from("movie");
-        save_req.data = String::from("Back to the future");
-
-        let req_bytes = Bytes::from(save_req.write_to_bytes().unwrap());
-
-        framed_stream.send(req_bytes).await.expect("Client: failed to send save request");
-
-        let resp = framed_stream.next().await.unwrap().unwrap();
-
-        let save_resp = parse_request::<SaveDataResponse>(&resp).expect("Failed to parse save response");
-
-        println!("Client: received save response from server, err_msg {}", save_resp.err_msg);
-
-        let mut req = GetDataRequest::new();
-
-        req.key = String::from("movie");
-
-        let req_bytes = Bytes::from(req.write_to_bytes().unwrap());
-
-        framed_stream.send(req_bytes).await.expect("Client: failed to send data");
-
-        let resp = framed_stream.next().await.unwrap().unwrap();
-
-        let get_resp = parse_request::<GetDataResponse>(&resp).expect("Failed to parse get response");
-
-        println!("Client: received get response from server, data {}, err_msg {}", get_resp.data, get_resp.err_msg)
-    });
-
     // Main request processing
     loop {
         let (socket, _) = listener.accept().await.unwrap();
@@ -79,7 +38,14 @@ async fn main() -> Result<(), Box<io::Error>> {
     };
 }
 
+/// Coroutine for handling each connection over tcp
+///
+/// It uses data framing to achieve serialization/deserialization correctness
+/// of data exchanging.
+///
+/// Takes connection TcpStream and executor to handle requests.
 async fn handle_socket(stream: TcpStream, executor: Arc<Executor>) -> Result<(), io::Error> {
+    // Using custom codec for data framing during communication over socket
     let codec = LengthDelimitedCodec::new();
 
     let mut framed_stream = Framed::new(stream, codec);
@@ -171,6 +137,54 @@ fn encode_response<T: Message + std::default::Default>(resp: &T) -> Vec<u8> {
 
     res
 }
+
+/// Utiliraty coroutine just to check that communication works
+async fn client_example(addr: String) {
+    let client_socket = TcpSocket::new_v4().unwrap();
+    let client_stream = client_socket
+    .connect(addr.parse().unwrap())
+    .await
+    .expect("Client: failed to establish connection with the server");
+
+    let codec = LengthDelimitedCodec::new();
+    let mut framed_stream = Framed::new(client_stream, codec);
+
+    // Sending save request
+    let mut save_req = SaveDataRequest::new();
+
+    save_req.key = String::from("movie");
+    save_req.data = String::from("Back to the future");
+
+    let req_bytes = Bytes::from(save_req.write_to_bytes().unwrap());
+
+    framed_stream.send(req_bytes)
+        .await
+        .expect("Client: failed to send save request");
+
+    let resp = framed_stream.next().await.unwrap().unwrap();
+
+    let save_resp = parse_request::<SaveDataResponse>(&resp).expect("Failed to parse save response");
+
+    println!("Client: received save response from server, err_msg {}", save_resp.err_msg);
+
+    // Sending get request
+    let mut req = GetDataRequest::new();
+
+    req.key = String::from("movie");
+
+    let req_bytes = Bytes::from(req.write_to_bytes().unwrap());
+
+    framed_stream.send(req_bytes)
+        .await
+        .expect("Client: failed to send data");
+
+    let resp = framed_stream.next().await.unwrap().unwrap();
+
+    let get_resp = parse_request::<GetDataResponse>(&resp).expect("Failed to parse get response");
+
+    println!("Client: received get response from server, data {}, err_msg {}", get_resp.data, get_resp.err_msg)
+}
+
 
 #[test]
 fn test_encode_decode() {

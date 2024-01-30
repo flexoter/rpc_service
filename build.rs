@@ -4,8 +4,6 @@ use std::env;
 use protoc_bin_vendored;
 
 fn main() -> Result<()> {
-    std::env::set_var("SOURCE_DIR", "/Users/vbukovshin/Documents/projects/personal/rust/rpc_service/");
-
     let base_path = std::env::var("SOURCE_DIR").unwrap_or(String::from("/"));
     let proto_path = base_path.clone() + "/src/proto/storage_service.proto";
 

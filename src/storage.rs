@@ -6,13 +6,25 @@ use sqlx::{Any, AnyPool, Executor, Pool, Row};
 const STORE_DATA_QUERY_IMPL: &str = r"insert into key_data values ($1, $2)";
 const GET_DATA_QUERY_IMPL: &str = r"select data from key_data values where key = $1";
 
+/// Storage type with pool of any connections
+///
+/// Utilizes Pool<Any> to achieve handling arbitrary db storage.
+/// Uses db url to determine which driver to use.
+///
+/// It's main purpose to serve as a db handler in executor.rs.
+///
+/// Supports two kind of requests:
+///     - storing data with key and data, both text types;
+///     - retreiving data with a specific key.
 pub struct Storage {
     conn: Pool<Any>
 }
 
-unsafe impl Send for Storage {}
-
 impl Storage {
+    /// Creates new storage.
+    ///
+    /// Runs sqlx::any::install_default_drivers() at first to initialize
+    /// all the available db drivers.
     pub async fn new(url: &str) -> Result<Self, Box<dyn Error>> {
         sqlx::any::install_default_drivers();
 
@@ -43,6 +55,7 @@ impl Storage {
         }
     }
 
+    /// Method for storing data by key in db.
     pub async fn store_data_by_key(&self, key: &str, data: &str) -> Result<(), Box<dyn Error>> {
         let r = sqlx::query(STORE_DATA_QUERY_IMPL)
         .bind(key)
@@ -62,6 +75,7 @@ impl Storage {
         }
     }
 
+    /// Method for retreiving data by key in db.
     pub async fn get_data_by_key(&self, key: &str) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
         let r = sqlx::query(GET_DATA_QUERY_IMPL)
         .bind(key)
@@ -95,6 +109,9 @@ impl Storage {
         Result::Ok(result)
     }
 
+    /// Method for closing underlying db connections.
+    ///
+    /// It's intended to use in Drop implementation.
     pub async fn close(&self) -> Result<(), Box<dyn Error>> {
         let r = self.drop_scheme().await;
         if let Err(err) = r {
@@ -110,6 +127,7 @@ impl Storage {
         Ok(())
     }
 
+    /// Init some table to store data.
     pub async fn init_scheme(&self) -> Result<(), Box<dyn Error>> {
         let r = self.conn.execute(
             r#"DROP TABLE IF EXISTS key_data;"#).await;
@@ -144,6 +162,7 @@ impl Storage {
         Ok(())
     }
 
+    /// Drop table in case we don't need it anymore.
     pub async fn drop_scheme(&self) -> Result<(), Box<dyn Error>> {
         let r = self.conn.execute(
             r#"DROP TABLE IF EXISTS key_data;"#).await;
