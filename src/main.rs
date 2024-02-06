@@ -11,6 +11,9 @@ use tokio::net::{TcpListener, TcpStream, TcpSocket};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tokio_stream::StreamExt;
 
+use leaky_bucket::RateLimiter;
+use std::time::Duration;
+
 use futures::sink::SinkExt;
 
 use std::sync::Arc;
@@ -22,9 +25,25 @@ use bytes::Bytes;
 async fn main() -> Result<(), Box<io::Error>> {
     let addr = std::env::var("SERVICE_URL").unwrap();
     let db_url = std::env::var("DATABASE_URL").unwrap();
+    let rate_s = std::env::var("SERVICE_RATE_LIMIT").unwrap();
+
+    const DEFAULT_RATE: usize = 1000;
+    let mut rate = DEFAULT_RATE;
+
+    match rate_s.parse::<usize>() {
+        Ok(r) => { rate = r; }
+        _ => {}
+    }
 
     println!("SERVICE_URL: {}", &addr);
     println!("DATABASE_URL: {}", &db_url);
+    println!("SERVICE_RATE_LIMIT: {}", &rate);
+
+    let rate_limiter = RateLimiter::builder()
+        .max(rate)
+        .initial(0)
+        .build();
+    let rate_limiter = Arc::new(rate_limiter);
 
     let db = Storage::new(&db_url).await.unwrap();
     let executor = Arc::new(Executor::new(db));
@@ -33,13 +52,11 @@ async fn main() -> Result<(), Box<io::Error>> {
     let listener = TcpListener::bind(&addr).await?;
     println!("Listening on: {}", addr);
 
-    tokio::spawn(client_example(addr));
-
     // Main request processing
     loop {
         let (socket, _) = listener.accept().await.unwrap();
 
-        tokio::spawn(handle_socket(socket, executor.clone()));
+        tokio::spawn(handle_socket(socket, executor.clone(), rate_limiter.clone()));
     };
 }
 
@@ -49,13 +66,15 @@ async fn main() -> Result<(), Box<io::Error>> {
 /// of data exchanging.
 ///
 /// Takes connection TcpStream and executor to handle requests.
-async fn handle_socket(stream: TcpStream, executor: Arc<Executor>) -> Result<(), io::Error> {
+async fn handle_socket(stream: TcpStream, executor: Arc<Executor>, rate_limiter: Arc<RateLimiter>) -> Result<(), io::Error> {
     // Using custom codec for data framing during communication over socket
     let codec = LengthDelimitedCodec::new();
 
     let mut framed_stream = Framed::new(stream, codec);
 
     loop {
+        rate_limiter.acquire_one().await;
+
         let ex = Arc::clone(&executor);
 
         match framed_stream.next().await {
@@ -64,7 +83,7 @@ async fn handle_socket(stream: TcpStream, executor: Arc<Executor>) -> Result<(),
                     Ok(bytes) => {
                         println!("Server: processing incoming frame, len {}", bytes.len());
 
-                        let mut req_r = parse_request::<SaveDataRequest>(&bytes);
+                        let req_r = parse_request::<SaveDataRequest>(&bytes);
                         if req_r.is_ok() {
                             let mut save_req = req_r.unwrap();
                             match process_save_request(&mut save_req, &mut framed_stream, ex.clone()).await {
@@ -73,7 +92,7 @@ async fn handle_socket(stream: TcpStream, executor: Arc<Executor>) -> Result<(),
                             }
                         }
 
-                        let mut req_r = parse_request::<GetDataRequest>(&bytes);
+                        let req_r = parse_request::<GetDataRequest>(&bytes);
                         if req_r.is_ok() {
                             let mut get_req = req_r.unwrap();
                             match process_get_request(&mut get_req, &mut framed_stream, ex.clone()).await {

@@ -42,8 +42,6 @@ impl Executor {
 
     pub async fn get_cached_data_by_key(&self, key: String) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
         let c = Arc::clone(&self.cache);
-        let st = Arc::clone(&self.storage);
-
         let cache = c.lock().await;
 
         match cache.get(&key) {
