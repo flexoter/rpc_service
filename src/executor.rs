@@ -1,6 +1,7 @@
 // #[path = "storage.rs"] mod storage;
 use crate::storage::Storage;
 
+use std::io;
 use std::{collections::HashMap, error::Error};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -39,7 +40,7 @@ impl Executor {
         storage.store_data_by_key(&key, &data).await
     }
 
-    pub async fn get_data_by_key(&self, key: String) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+    pub async fn get_cached_data_by_key(&self, key: String) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
         let c = Arc::clone(&self.cache);
         let st = Arc::clone(&self.storage);
 
@@ -50,10 +51,16 @@ impl Executor {
                 return Ok(Vec::from([data.clone()]));
             }
             None => {
-                let storage = st.lock().await;
-
-                storage.get_data_by_key(&key).await
+                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Executor: no such key in cache")));
             }
         }
+    }
+
+    pub async fn get_data_by_key(&self, key: String) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+        let st = Arc::clone(&self.storage);
+
+        let storage = st.lock().await;
+
+        storage.get_data_by_key(&key).await
     }
 }

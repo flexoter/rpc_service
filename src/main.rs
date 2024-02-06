@@ -140,7 +140,6 @@ async fn handle_get_request(req: &mut GetDataRequest, executor: Arc<Executor>) -
     match executor.get_data_by_key(req.take_key()).await {
         Ok(res) => {
             response.data = std::option::Option::from(res.join("\n").to_string());
-            response.err_msg = std::option::Option::from("GET HANDLED".to_string())
         }
         Err(err) => {
             response.err_msg = std::option::Option::from(format!("get request failed due to the following error: {}", err));
@@ -156,9 +155,7 @@ async fn handle_save_request(req: &mut SaveDataRequest, executor: Arc<Executor>)
     let mut response = SaveDataResponse::new();
 
     match executor.store_data_by_key(req.take_key(), req.take_data()).await {
-        Ok(_) => {
-            response.err_msg = std::option::Option::from("SAVE HANDLED".to_string());
-        }
+        Ok(_) => {}
         Err(err) => {
             response.err_msg = std::option::Option::from(format!("save request failed due to the following error: {}", err));
         }
@@ -181,8 +178,6 @@ fn encode_response<T: Message + std::default::Default>(resp: &T) -> Vec<u8> {
 
 /// Utiliraty coroutine just to check that communication works
 async fn client_example(addr: String) {
-    // let client_stream = TcpStream::connect(addr).await.unwrap();
-
     let client_socket = TcpSocket::new_v4().unwrap();
     let client_stream = client_socket
     .connect(addr.parse().unwrap())
