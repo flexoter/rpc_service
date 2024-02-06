@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-syntax = "proto3";
+syntax = "proto2";
 
 package storage_service_another;
 
@@ -27,20 +27,20 @@ service Storage {
 
 // The request message containing the user's name.
 message SaveDataRequest {
-  string key = 1;
-  string data = 2;
+  required string key = 1;
+  required string data = 2;
 }
 
 // The response message containing the greetings
 message SaveDataResponse {
-  string err_msg = 1;
+  optional string err_msg = 1;
 }
 
 message GetDataRequest {
-  string key = 1;
+  required string key = 1;
 }
 
 message GetDataResponse {
-  string data = 1;
-  string err_msg = 2;
+  required string data = 1;
+  optional string err_msg = 2;
 }

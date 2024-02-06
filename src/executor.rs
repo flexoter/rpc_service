@@ -45,14 +45,15 @@ impl Executor {
 
         let cache = c.lock().await;
 
-        // Let's check if we have the key in the cache
-        if let Some(data) = cache.get(&key) {
-            return Ok(Vec::from([data.clone()]));
+        match cache.get(&key) {
+            Some(data) => {
+                return Ok(Vec::from([data.clone()]));
+            }
+            None => {
+                let storage = st.lock().await;
+
+                storage.get_data_by_key(&key).await
+            }
         }
-
-        let storage = st.lock().await;
-
-        // If we don't we grab it from the storage
-        storage.get_data_by_key(&key).await
     }
 }
