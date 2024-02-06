@@ -21,11 +21,21 @@ use std::io;
 
 use bytes::Bytes;
 
+fn get_refill_interval_from_rate(rate: usize) -> Duration {
+    if rate == 0 {
+        return Duration::from_millis(100);
+    }
+
+    let r = 60_000f64 / rate as f64;
+
+    Duration::from_millis(r as u64)
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<io::Error>> {
     let addr = std::env::var("SERVICE_URL").unwrap();
     let db_url = std::env::var("DATABASE_URL").unwrap();
-    let rate_s = std::env::var("SERVICE_RATE_LIMIT").unwrap();
+    let rate_s = std::env::var("SERVICE_RPS").unwrap();
 
     const DEFAULT_RATE: usize = 1000;
     let mut rate = DEFAULT_RATE;
@@ -42,6 +52,8 @@ async fn main() -> Result<(), Box<io::Error>> {
     let rate_limiter = RateLimiter::builder()
         .max(rate)
         .initial(0)
+        .refill(1)
+        .interval(get_refill_interval_from_rate(rate))
         .build();
     let rate_limiter = Arc::new(rate_limiter);
 
